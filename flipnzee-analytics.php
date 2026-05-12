@@ -27,6 +27,23 @@ require_once plugin_dir_path(__FILE__) . 'includes/ga-api.php';
 require_once plugin_dir_path(__FILE__) . 'includes/shortcodes.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-page.php';
 
+// ================== FRONTEND ASSETS ==================
+
+  // ================== FRONTEND ASSETS ==================
+
+add_action('wp_enqueue_scripts', function () {
+
+    wp_enqueue_style(
+        'flipnzee-frontend',
+        plugins_url(
+            'assets/css/frontend.css',
+            __FILE__
+        ),
+        [],
+        time()
+    );
+
+}, 99);
 
 // ================== CRON SETUP ==================
 
