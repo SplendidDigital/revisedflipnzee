@@ -43,6 +43,7 @@ function flipnzee_get_access_token() {
 
 
     // ---------- REFRESH TOKEN ----------
+
     if (
         time() > ($created + $expires_in - 60)
         && !empty($refresh_token)
@@ -106,6 +107,59 @@ function flipnzee_get_access_token() {
 
 
 
+// ================== GOOGLE POST ==================
+
+function flipnzee_google_post($endpoint, $body) {
+
+    $access_token = flipnzee_get_access_token();
+
+    if (!$access_token) {
+        return false;
+    }
+
+    $response = wp_remote_post(
+        $endpoint,
+        [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $access_token,
+                'Content-Type'  => 'application/json'
+            ],
+
+            'body' => wp_json_encode($body),
+
+            'timeout' => 20
+        ]
+    );
+
+    if (is_wp_error($response)) {
+
+        error_log(
+            'FLIPNZEE REQUEST ERROR: ' .
+            $response->get_error_message()
+        );
+
+        return false;
+    }
+
+    $status = wp_remote_retrieve_response_code($response);
+
+    if ($status !== 200) {
+
+        error_log(
+            'FLIPNZEE HTTP ERROR: ' .
+            $status
+        );
+
+        return false;
+    }
+
+    return json_decode(
+        wp_remote_retrieve_body($response),
+        true
+    );
+}
+
+
 
 // ================== FETCH MAIN ==================
 
@@ -144,54 +198,38 @@ function flipnzee_fetch_and_store($property_id, $post_id) {
 
     // ================= CURRENT PERIOD =================
 
-    $response_current = wp_remote_post(
+    $data_current = flipnzee_google_post(
         $endpoint,
         [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $access_token,
-                'Content-Type'  => 'application/json'
+            'dateRanges' => [
+                [
+                    'startDate' => '30daysAgo',
+                    'endDate'   => 'today'
+                ]
             ],
 
-            'body' => wp_json_encode([
-
-                'dateRanges' => [
-                    [
-                        'startDate' => '30daysAgo',
-                        'endDate'   => 'today'
-                    ]
-                ],
-
-                'metrics' => [
-                    ['name' => 'activeUsers'],
-                    ['name' => 'sessions']
-                ]
-            ])
+            'metrics' => [
+                ['name' => 'activeUsers'],
+                ['name' => 'sessions']
+            ]
         ]
     );
 
+    if (!$data_current) {
 
-    if (is_wp_error($response_current)) {
-
-        error_log(
-            'FLIPNZEE CURRENT FETCH ERROR: ' .
-            $response_current->get_error_message()
+        set_transient(
+            "flipnzee_main_{$post_id}",
+            flipnzee_empty_response(),
+            HOUR_IN_SECONDS
         );
 
         return;
     }
 
-
-    $data_current = json_decode(
-        wp_remote_retrieve_body($response_current),
-        true
-    );
-
-
     error_log(
         'FLIPNZEE CURRENT RESPONSE: ' .
         print_r($data_current, true)
     );
-
 
     if (!empty($data_current['error'])) {
 
@@ -209,7 +247,6 @@ function flipnzee_fetch_and_store($property_id, $post_id) {
         return;
     }
 
-
     $users = intval(
         $data_current['rows'][0]['metricValues'][0]['value'] ?? 0
     );
@@ -222,47 +259,27 @@ function flipnzee_fetch_and_store($property_id, $post_id) {
 
     // ================= PREVIOUS PERIOD =================
 
-    $response_previous = wp_remote_post(
-        $endpoint,
-        [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $access_token,
-                'Content-Type'  => 'application/json'
-            ],
+    $data_previous = flipnzee_google_post(
+    $endpoint,
+    [
+        'dateRanges' => [
+            [
+                'startDate' => '60daysAgo',
+                'endDate'   => '30daysAgo'
+            ]
+        ],
 
-            'body' => wp_json_encode([
-
-                'dateRanges' => [
-                    [
-                        'startDate' => '60daysAgo',
-                        'endDate'   => '30daysAgo'
-                    ]
-                ],
-
-                'metrics' => [
-                    ['name' => 'activeUsers']
-                ]
-            ])
+        'metrics' => [
+            ['name' => 'activeUsers']
         ]
-    );
+    ]
+);
 
+if (!$data_previous) {
+    return;
+}
 
-    if (is_wp_error($response_previous)) {
-
-        error_log(
-            'FLIPNZEE PREVIOUS FETCH ERROR: ' .
-            $response_previous->get_error_message()
-        );
-
-        return;
-    }
-
-
-    $data_previous = json_decode(
-        wp_remote_retrieve_body($response_previous),
-        true
-    );
-
+   
 
     if (!empty($data_previous['error'])) {
 
@@ -274,11 +291,9 @@ function flipnzee_fetch_and_store($property_id, $post_id) {
         return;
     }
 
-
     $previous_users = intval(
         $data_previous['rows'][0]['metricValues'][0]['value'] ?? 0
     );
-
 
     $trend_percent = $previous_users > 0
         ? round(
@@ -288,7 +303,6 @@ function flipnzee_fetch_and_store($property_id, $post_id) {
             ) * 100
         )
         : 0;
-
 
     $trend_label = $trend_percent > 0
         ? '↑'
@@ -378,7 +392,6 @@ function flipnzee_fetch_insights($property_id, $post_id) {
         ]
     );
 
-
     if (!is_wp_error($response)) {
 
         $data = json_decode(
@@ -452,7 +465,6 @@ function flipnzee_fetch_insights($property_id, $post_id) {
         ]
     );
 
-
     if (!is_wp_error($response)) {
 
         $data = json_decode(
@@ -509,13 +521,11 @@ function flipnzee_fetch_insights($property_id, $post_id) {
 
         $domain = rtrim($domain, '/');
 
-
         $variants = [
             'https://' . $domain . '/',
             'sc-domain:' . $domain,
             'http://' . $domain . '/'
         ];
-
 
         foreach ($variants as $site_for_api) {
 
@@ -553,22 +563,18 @@ function flipnzee_fetch_insights($property_id, $post_id) {
                 ]
             );
 
-
             if (is_wp_error($response)) {
                 continue;
             }
-
 
             $raw = wp_remote_retrieve_body($response);
 
             $data = json_decode($raw, true);
 
-
             error_log(
                 'FLIPNZEE SC RESPONSE: ' .
                 $raw
             );
-
 
             if (!empty($data['rows'])) {
 
