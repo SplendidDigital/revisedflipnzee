@@ -1,4 +1,3 @@
-```php
 <?php
 
 // ================== EMPTY RESPONSE ==================
@@ -113,6 +112,11 @@ function flipnzee_get_access_token() {
 // ================== GOOGLE POST ==================
 
 function flipnzee_google_post($endpoint, $body) {
+    file_put_contents(
+    '/tmp/flipnzee-test.log',
+    "GOOGLE POST FUNCTION CALLED\n",
+    FILE_APPEND
+);
 
     $access_token = flipnzee_get_access_token();
 
@@ -133,6 +137,14 @@ function flipnzee_google_post($endpoint, $body) {
             'timeout' => 20
         ]
     );
+
+    file_put_contents(
+    '/tmp/flipnzee-test.log',
+    "RAW API RESPONSE:\n" .
+    print_r($response, true) .
+    "\n",
+    FILE_APPEND
+);
 
     if (is_wp_error($response)) {
 
@@ -221,6 +233,14 @@ function flipnzee_fetch_and_store($property_id, $post_id) {
         ]
     );
 
+    file_put_contents(
+    '/tmp/flipnzee-test.log',
+    "CURRENT DATA:\n" .
+    print_r($data_current, true) .
+    "\n",
+    FILE_APPEND
+);
+
     if (!$data_current) {
 
         set_transient(
@@ -299,6 +319,16 @@ function flipnzee_fetch_and_store($property_id, $post_id) {
             ]
         ]
     );
+
+  
+
+    file_put_contents(
+    '/tmp/flipnzee-test.log',
+    "PREVIOUS DATA:\n" .
+    print_r($data_previous, true) .
+    "\n",
+    FILE_APPEND
+);
 
     if (!$data_previous) {
 
@@ -696,4 +726,3 @@ function flipnzee_fetch_insights($property_id, $post_id) {
         6 * HOUR_IN_SECONDS
     );
 }
-```
